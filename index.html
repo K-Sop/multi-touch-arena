@@ -1,0 +1,1146 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>Multi Touch Arena</title>
+<meta name="theme-color" content="#0b0f1a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MultiArena">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<style>
+/* ギリシャ文字・単位記号(Ω等)は日本語フォントの字形が崩れる/別文字に見えることがあるため、専用フォントで描く */
+@font-face{font-family:"PTA Greek";font-weight:100 600;
+  src:local("Segoe UI"),local("Arial"),local("Helvetica Neue"),local("Helvetica"),local("Noto Sans"),local("DejaVu Sans");
+  unicode-range:U+0370-03FF,U+1F00-1FFF,U+2126,U+212B,U+2190-21FF,U+2200-22FF;}
+@font-face{font-family:"PTA Greek";font-weight:700 900;
+  src:local("Segoe UI Bold"),local("Arial Bold"),local("Arial-BoldMT"),local("Helvetica Neue Bold"),local("Helvetica-Bold"),local("Noto Sans Bold"),local("DejaVu Sans Bold"),local("Segoe UI"),local("Arial");
+  unicode-range:U+0370-03FF,U+1F00-1FFF,U+2126,U+212B,U+2190-21FF,U+2200-22FF;}
+:root{
+  --bg:#0b0f1a; --panel:#141b2d; --text:#fff; --ok:#16a34a; --ng:#dc2626; --dim:#9aa6bf;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:"PTA Greek","Yu Gothic UI","Meiryo","Hiragino Sans","Segoe UI","Segoe UI Symbol","Noto Sans JP","Noto Sans",sans-serif;
+  touch-action:manipulation;user-select:none;-webkit-user-select:none;overscroll-behavior:none;}
+input{user-select:text;-webkit-user-select:text;}
+button{font-family:inherit;}
+.screen{position:fixed;inset:0;display:none;}
+.screen.active{display:flex;}
+
+/* ---------- メニュー ---------- */
+#menu{flex-direction:column;align-items:center;justify-content:flex-start;gap:2vh;padding:2vh 4vw;text-align:center;overflow-y:auto;touch-action:pan-y;}
+#menu>:first-child{margin-top:auto;}#menu>:last-child{margin-bottom:auto;}
+#menu h1{margin:0;font-size:clamp(28px,6vh,64px);letter-spacing:.04em;}
+#menu h1 span{color:#38bdf8;}
+#menu .sub{color:var(--dim);font-size:clamp(14px,2.2vh,22px);margin-top:-1vh;}
+.modes{display:flex;gap:2vw;width:min(1100px,94vw);}
+.modebtn{flex:1;background:var(--panel);border:3px solid #2a3556;border-radius:18px;color:#fff;
+  padding:2.2vh 1vw;font-size:clamp(16px,3vh,32px);font-weight:700;cursor:pointer;}
+.modebtn small{display:block;font-weight:400;color:var(--dim);font-size:.55em;margin-top:.6em;}
+.modebtn.sel{border-color:#38bdf8;background:#12304a;}
+.row{display:flex;gap:1.5vw;align-items:center;justify-content:center;flex-wrap:wrap;font-size:clamp(14px,2.4vh,24px);}
+.row .lbl{color:var(--dim);}
+.chip{background:var(--panel);border:3px solid #2a3556;border-radius:12px;color:#fff;
+  min-width:clamp(44px,8vh,80px);height:clamp(44px,8vh,80px);font-size:clamp(18px,3.4vh,34px);font-weight:700;cursor:pointer;padding:0 14px;}
+.chip.sel{border-color:#38bdf8;background:#12304a;}
+.big{background:#38bdf8;color:#04121f;border:0;border-radius:18px;font-weight:800;
+  font-size:clamp(20px,4vh,40px);padding:1.6vh 5vw;cursor:pointer;}
+.big:disabled{background:#35405e;color:#7d89a6;}
+.ghost{background:transparent;border:2px solid #3b4a74;color:#cfd8ee;border-radius:12px;
+  font-size:clamp(13px,2.2vh,20px);padding:1vh 2vw;cursor:pointer;}
+.ghost:disabled{opacity:.4;}
+#status{color:var(--dim);font-size:clamp(12px,2vh,18px);min-height:1.4em;max-width:90vw;}
+#status.err{color:#fca5a5;}
+
+/* ---------- ゲーム ---------- */
+#game{flex-direction:column;touch-action:none;}
+#topbar{flex:0 0 auto;height:clamp(34px,6vh,56px);display:flex;align-items:center;justify-content:space-between;
+  padding:0 1.5vw;background:#0f1424;border-bottom:2px solid #232c48;font-size:clamp(13px,2.4vh,22px);}
+#topbar .score{display:flex;gap:1.2vw;flex-wrap:wrap;}
+#topbar .score b{padding:.1em .6em;border-radius:999px;color:#000;}
+#grid{flex:1;display:grid;gap:6px;padding:6px;min-height:0;}
+.zone{position:relative;background:var(--panel);border:5px solid var(--pc);border-radius:16px;
+  display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;container-type:size;}
+.zhead{flex:0 0 auto;display:flex;justify-content:space-between;align-items:center;
+  background:var(--pc);color:#000;font-weight:800;padding:0 3cqw;height:11cqh;font-size:min(6.5cqh,5cqw);}
+.zbody{flex:1;display:flex;flex-direction:column;min-height:0;padding:2cqmin;gap:2cqmin;overflow-y:auto;overflow-x:hidden;touch-action:none;scrollbar-width:none;overscroll-behavior:contain;}
+.zbody>*{flex-shrink:0;}
+.qtext{flex:0 0 auto;font-weight:700;line-height:1.35;font-size:min(7cqh,6cqw);overflow-wrap:break-word;word-break:auto-phrase;text-wrap:pretty;}
+sup,sub{font-size:.68em;line-height:0;font-weight:inherit;}
+sup{vertical-align:super;}sub{vertical-align:sub;}
+.qtext .tag{display:inline-block;background:#334;color:#cfe;border-radius:6px;padding:0 .4em;font-size:.6em;margin-right:.5em;vertical-align:middle;}
+.qimg{flex:0 0 auto;height:26cqh;display:flex;justify-content:center;position:relative;cursor:zoom-in;}
+.qimg img{max-width:100%;max-height:100%;object-fit:contain;border-radius:8px;background:#fff;}
+.qimg::after{content:"🔍 拡大";position:absolute;right:1.5cqw;bottom:1.5cqh;background:rgba(0,0,0,.72);color:#fff;border-radius:8px;padding:.1em .55em;font-size:max(12px,3.6cqh);font-weight:700;}
+.choices{flex:0 0 auto;margin-top:auto;display:grid;grid-template-columns:1fr 1fr;grid-template-rows:repeat(2,19cqh);gap:2cqmin;}
+.choices.one{grid-template-columns:1fr;}
+.choice{position:relative;display:flex;align-items:center;gap:2cqmin;text-align:left;
+  background:#1f2a48;color:#fff;border:4px solid #3a4a78;border-radius:14px;padding:.6cqh 1.6cqmin;overflow:hidden;
+  font-size:min(6.5cqh,5.2cqw);font-weight:700;cursor:pointer;min-height:0;min-width:0;touch-action:none;}
+.choice .mk{flex:0 0 auto;width:1.7em;height:1.7em;border-radius:50%;background:var(--pc);color:#000;
+  display:flex;align-items:center;justify-content:center;font-weight:900;}
+.choice.multi .mk{border-radius:6px;}
+.choice .tx .seg{display:inline-block;max-width:100%;}
+.choice .tx{flex:1;line-height:1.25;overflow-wrap:break-word;word-break:auto-phrase;text-wrap:balance;min-width:0;}
+.choice.on{border-color:#fff;background:#2c3e70;}
+.choice.on .mk::after{content:"✓";}
+.choice.right{background:var(--ok);border-color:#bbf7d0;}
+.choice.wrong{background:var(--ng);border-color:#fecaca;}
+.choice.miss{border-color:#bbf7d0;border-style:dashed;}
+.choice.dim{opacity:.45;}
+.submit{flex:0 0 auto;position:sticky;bottom:0;height:13cqh;background:var(--pc);color:#000;border:0;border-radius:12px;
+  font-size:min(7cqh,6cqw);font-weight:900;cursor:pointer;touch-action:none;box-shadow:0 -1.5cqh 1.5cqh var(--panel);}
+.submit:disabled{opacity:.35;}
+.result{position:absolute;inset:11cqh 0 0 0;background:#0a0f1d;display:none;flex-direction:column;
+  padding:3cqmin;gap:2cqmin;z-index:4;}
+.result.show{display:flex;}
+.verdict{flex:0 0 auto;text-align:center;font-weight:900;border-radius:14px;padding:1cqh 0;font-size:min(12cqh,11cqw);}
+.verdict.ok{background:var(--ok);} .verdict.ng{background:var(--ng);}
+.expl{flex:1;min-height:0;overflow-y:auto;overflow-x:hidden;touch-action:none;scrollbar-width:none;overscroll-behavior:contain;font-size:min(6cqh,4.8cqw);line-height:1.5;overflow-wrap:break-word;word-break:auto-phrase;}
+.expl .ans{color:#86efac;font-weight:800;margin-bottom:.4em;}
+.nextbtn{flex:0 0 auto;height:15cqh;background:#fff;color:#000;border:0;border-radius:14px;
+  font-size:min(8cqh,6.5cqw);font-weight:900;cursor:pointer;touch-action:none;}
+.finish{position:absolute;inset:11cqh 0 0 0;background:var(--panel);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:2cqh;text-align:center;}
+.finish.show{display:flex;}
+.finish .big2{font-size:min(16cqh,14cqw);font-weight:900;}
+.finish .sm{font-size:min(6cqh,5cqw);color:var(--dim);}
+
+/* ---------- 生徒管理・モーダル ---------- */
+.chip small{font-size:.5em;color:#fcd34d;}
+.chip.asg{font-size:clamp(14px,2.6vh,26px);padding:0 1.6vw;}
+#modal{position:fixed;inset:0;background:rgba(0,0,0,.72);display:none;align-items:center;justify-content:center;z-index:100;}
+#modal.show{display:flex;}
+#modalBox{background:var(--panel);border:3px solid #38bdf8;border-radius:18px;padding:3vh 3vw;max-width:92vw;max-height:88vh;overflow:auto;touch-action:pan-y;text-align:center;}
+.mt{font-size:clamp(18px,3.2vh,32px);font-weight:800;margin-bottom:1.5vh;}
+.msub{color:var(--dim);font-size:clamp(13px,2.2vh,20px);margin-bottom:2.5vh;}
+.mgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(clamp(96px,17vh,170px),1fr));gap:1vh;margin-bottom:2vh;}
+.mbtns{display:flex;gap:2vw;justify-content:center;flex-wrap:wrap;}
+#modalBox .cbtn{height:auto;min-height:7vh;min-width:16vw;font-size:clamp(16px,3vh,28px);padding:1vh 2vw;}
+#students{flex-direction:column;}
+.sthead{display:flex;justify-content:space-between;align-items:center;padding:1.5vh 3vw;border-bottom:2px solid #232c48;}
+.sthead h2{margin:0;font-size:clamp(20px,4vh,40px);}
+.stbody{flex:1;display:flex;gap:3vw;padding:2vh 3vw;min-height:0;}
+.stleft{flex:0 0 min(430px,42vw);display:flex;flex-direction:column;gap:1.4vh;}
+.stlbl{color:var(--dim);font-size:clamp(12px,2vh,18px);line-height:1.5;}
+#stuInput{width:100%;background:#0f1424;color:#fff;border:3px solid #3b4a74;border-radius:12px;
+  font-size:clamp(22px,4.2vh,42px);padding:1vh 1.5vw;text-align:center;letter-spacing:.08em;}
+.pad{display:grid;grid-template-columns:repeat(4,1fr);gap:1vh;}
+.pad button{height:clamp(44px,8.5vh,84px);background:var(--panel);border:3px solid #2a3556;border-radius:12px;color:#fff;
+  font-size:clamp(18px,3.6vh,36px);font-weight:800;cursor:pointer;}
+.pad button.w2{grid-column:span 2;}
+#stuMsg{min-height:1.5em;font-size:clamp(13px,2.2vh,20px);color:#86efac;}
+#stuMsg.err{color:#fca5a5;}
+.stright{flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;}
+.strow-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:1.2vh;font-size:clamp(14px,2.6vh,24px);font-weight:700;}
+#stuList{flex:1;min-height:0;overflow-y:auto;touch-action:pan-y;}
+.srow{display:flex;align-items:center;gap:1.2vw;background:var(--panel);border-radius:12px;padding:1vh 1.4vw;margin-bottom:1vh;font-size:clamp(13px,2.4vh,22px);}
+.srow b{font-size:1.5em;min-width:3em;letter-spacing:.05em;}
+.srow .st{color:var(--dim);flex:1;}
+.srow .st em{color:#fcd34d;font-style:normal;}
+.srow .dng{border-color:#7f1d1d;color:#fca5a5;}
+
+/* ---------- 枠ごとの操作 ---------- */
+.zbtns{display:flex;gap:1.2cqw;align-items:center;}
+.zbtn{height:8.5cqh;min-width:11cqh;padding:0 1.5cqw;border:0;border-radius:10px;background:rgba(0,0,0,.78);color:#fff;
+  font-size:min(5.2cqh,4.4cqw);font-weight:900;cursor:pointer;touch-action:none;}
+.zbtn.off{opacity:.3;}
+.zbtn.endb{background:#7f1d1d;}
+.zprog{font-size:.8em;}
+.confirm{position:absolute;inset:11cqh 0 0 0;background:rgba(8,12,24,.96);display:none;flex-direction:column;
+  align-items:center;justify-content:center;gap:3cqh;text-align:center;}
+.confirm.show{display:flex;}
+.confirm .msg{font-size:min(8cqh,6.5cqw);font-weight:900;}
+.confirm .sm{font-size:min(5cqh,4.2cqw);color:var(--dim);}
+.confirm .btns{display:flex;gap:3cqw;}
+.cbtn{height:16cqh;min-width:28cqw;border:0;border-radius:14px;font-size:min(7cqh,5.5cqw);font-weight:900;
+  cursor:pointer;touch-action:none;padding:0 3cqw;}
+.cbtn.yes{background:var(--ng);color:#fff;} .cbtn.no{background:#fff;color:#000;} .cbtn.re{background:var(--pc);color:#000;}
+.finish .cbtn{margin-top:2cqh;}
+
+/* ---------- 上下スクロールボタン・写真拡大 ---------- */
+.zrail{position:absolute;right:1.2cqw;top:13cqh;bottom:22cqh;width:max(36px,9cqw);display:none;flex-direction:column;justify-content:space-between;z-index:6;pointer-events:none;}
+.zone.ovf .zrail{display:flex;}
+.scbtn{pointer-events:auto;height:max(36px,11cqh);width:100%;border:0;border-radius:12px;background:rgba(255,255,255,.9);color:#000;font-size:max(16px,5.5cqh);font-weight:900;cursor:pointer;touch-action:none;box-shadow:0 2px 8px rgba(0,0,0,.55);}
+.scbtn.off{opacity:.22;}
+.zone.ovf .zbody,.zone.ovf .expl,.zone.ovf .zmenu{padding-right:max(42px,11cqw);}
+.zone.ovf .verdict{margin-right:max(42px,11cqw);}
+.imgv{position:absolute;inset:11cqh 0 0 0;background:#05080f;display:none;flex-direction:column;z-index:8;padding:2cqmin;gap:2cqmin;cursor:zoom-out;touch-action:none;}
+.imgv.show{display:flex;}
+.imgv img{flex:1;min-height:0;width:100%;object-fit:contain;background:#fff;border-radius:10px;}
+.imgv .back{flex:0 0 auto;height:max(44px,15cqh);display:flex;align-items:center;justify-content:center;background:var(--pc);color:#000;border-radius:12px;font-weight:900;font-size:max(16px,min(7cqh,6cqw));}
+
+/* ---------- 個別メニュー ---------- */
+.inmenu .zbtns{visibility:hidden;}
+.zmenu{flex:1;min-height:0;display:flex;flex-direction:column;gap:1.8cqh;overflow-y:auto;touch-action:none;scrollbar-width:none;justify-content:flex-start;padding:.5cqh 0;}
+.mrow{display:flex;align-items:center;gap:1.6cqw;flex-wrap:wrap;}
+.ml{flex:0 0 auto;min-width:15cqw;color:var(--dim);font-size:min(4.6cqh,3.8cqw);font-weight:700;}
+.mb{min-height:9.5cqh;padding:0 2.2cqw;background:#1f2a48;color:#fff;border:3px solid #3a4a78;border-radius:10px;
+  font-size:min(5.4cqh,4.4cqw);font-weight:800;cursor:pointer;touch-action:none;display:inline-flex;align-items:center;justify-content:center;gap:.3em;}
+.mb small{font-size:.6em;color:#fcd34d;}
+.mb.on{background:var(--pc);color:#000;border-color:#fff;}
+.mb.on small{color:#000;}
+.mb.dis{opacity:.35;}
+.mb.start{width:100%;min-height:15cqh;background:#fff;color:#000;font-size:min(7cqh,5.6cqw);border-color:#fff;margin-top:.8cqh;}
+.mb.start{position:sticky;bottom:0;z-index:2;box-shadow:0 -1.2cqh 0 var(--bg);flex:0 0 auto;}
+.mb.start.dis{background:#334;color:#889;border-color:#334;font-size:min(5cqh,4.2cqw);}
+.mtt{font-weight:800;font-size:min(6cqh,5cqw);text-align:center;}
+.mgrid2{display:grid;grid-template-columns:repeat(auto-fill,minmax(22cqw,1fr));gap:1.4cqw;}
+.finish .btns{display:flex;gap:2cqw;flex-wrap:wrap;justify-content:center;margin-top:2cqh;}
+.finish .btns .cbtn{margin-top:0;}
+.exprow{display:flex;align-items:center;gap:1vw;margin-bottom:1.2vh;}
+.exprow .lbl{color:var(--dim);font-size:clamp(12px,2vh,18px);white-space:nowrap;}
+#expName{flex:1;min-width:0;background:#0f1424;color:#fff;border:3px solid #3b4a74;border-radius:10px;font-size:clamp(14px,2.6vh,24px);padding:.8vh 1vw;}
+
+/* ---------- 結果 ---------- */
+#final{flex-direction:column;align-items:center;justify-content:center;gap:2vh;text-align:center;}
+#final h2{margin:0;font-size:clamp(26px,6vh,60px);}
+#rank{display:flex;flex-direction:column;gap:1vh;width:min(720px,90vw);}
+.rk{display:flex;align-items:center;gap:2vw;background:var(--panel);border-left:2.2vh solid var(--pc);
+  border-radius:12px;padding:1vh 2vw;font-size:clamp(18px,4vh,40px);font-weight:700;}
+.rk .n{width:1.6em;color:var(--dim);} .rk .s{margin-left:auto;}
+.touchdot{position:fixed;width:44px;height:44px;margin:-22px 0 0 -22px;border-radius:50%;pointer-events:none;
+  border:3px solid #fff;opacity:.0;}
+</style>
+</head>
+<body>
+
+<!-- メニュー -->
+<div id="menu" class="screen active">
+  <h1>Multi <span>Touch</span> Arena</h1>
+  <div class="sub">みんなで同時に答える マルチタッチ学習プラットフォーム</div>
+  <div class="modes">
+    <button class="modebtn" data-mode="solo">モードA 個人<small>1人 / 1台</small></button>
+    <button class="modebtn sel" data-mode="pair">モードB ペア<small>2人 / 1台・左右で個別に進行</small></button>
+    <button class="modebtn" data-mode="board">モードC 電子黒板<small>4〜8人 同時参加・個別に進行</small></button>
+  </div>
+  <div class="row" id="rowPlayers" style="display:none"><span class="lbl">人数</span>
+    <button class="chip" data-n="4">4人</button><button class="chip" data-n="6">6人</button><button class="chip" data-n="8">8人</button>
+  </div>
+  <div class="row">
+    <button class="ghost" id="btnLoad">problems.xlsx を読み込む</button>
+    <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" style="display:none">
+    <button class="ghost" id="btnSample">内蔵サンプルに戻す</button>
+  </div>
+  <div class="row"><button class="ghost" id="btnStudents">生徒の登録・管理</button><span class="lbl" id="stuInfo"></span></div>
+  <div class="sub" style="font-size:clamp(12px,2vh,18px)">スタート後、各自のメニューで 生徒番号・出題方法（通常／復習・問題数・順序・範囲）を選べます</div>
+  <div id="status"></div>
+  <button class="big" id="btnStart">スタート</button>
+</div>
+
+<!-- 生徒の登録・管理 -->
+<div id="students" class="screen">
+  <div class="sthead"><h2>生徒の登録・管理</h2><button class="ghost" id="btnStuBack">メニューへ戻る</button></div>
+  <div class="stbody">
+    <div class="stleft">
+      <div class="stlbl">4桁の生徒番号を入力して「登録」<br>まとめて登録： <b>2201-2240</b>（範囲） ／ <b>2201,2205</b>（複数）</div>
+      <input id="stuInput" inputmode="numeric" autocomplete="off" placeholder="2201">
+      <div class="pad" id="pad"></div>
+      <button class="big" id="btnStuAdd">登録</button>
+      <div id="stuMsg"></div>
+    </div>
+    <div class="stright">
+      <div class="strow-h"><span id="stuCount"></span><span style="display:flex;gap:1vw;flex-wrap:wrap;justify-content:flex-end"><button class="ghost" id="btnExpXlsx">Excelに書き出し</button><button class="ghost" id="btnExpCsv">CSVに書き出し</button><button class="ghost dng" id="btnAllClear">全員の履歴を消す</button></span></div>
+      <div class="exprow"><span class="lbl">書き出しのファイル名</span><input id="expName" autocomplete="off" spellcheck="false"><span class="lbl">.xlsx / .csv</span></div>
+      <div id="stuList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ゲーム -->
+<div id="game" class="screen">
+  <div id="topbar">
+    <div id="modeLbl"></div>
+    <div class="score" id="scoreBar"></div>
+    <span style="display:flex;gap:1vw"><button class="ghost" id="btnResult" style="background:#38bdf8;color:#04121f;border:0;font-weight:800">結果一覧</button><button class="ghost" id="btnQuit">やめる</button></span>
+  </div>
+  <div id="grid"></div>
+</div>
+
+<!-- 最終結果 -->
+<div id="final" class="screen">
+  <h2>結果一覧</h2>
+  <div id="rank"></div>
+  <div class="row"><button class="big" id="btnBackGame">ゲームに戻る</button><button class="ghost" id="btnMenu">スタートメニューへ</button></div>
+</div>
+
+<div id="modal"><div id="modalBox"></div></div>
+
+<script>
+"use strict";
+/* ===================== 定数 ===================== */
+const PLAYERS=[
+  {n:"P1",name:"青",c:"#3b82f6"},{n:"P2",name:"赤",c:"#ef4444"},{n:"P3",name:"緑",c:"#22c55e"},{n:"P4",name:"黄",c:"#facc15"},
+  {n:"P5",name:"紫",c:"#a855f7"},{n:"P6",name:"水色",c:"#22d3ee"},{n:"P7",name:"橙",c:"#fb923c"},{n:"P8",name:"桃",c:"#f472b6"}
+];
+const LETTERS=["A","B","C","D"];
+const SAMPLE=[
+ {id:1,cat:"エネルギー",q:"運動エネルギーに関係する量は？",ch:["高さ","速さ","電流","電圧"],ans:["B"],ex:"運動エネルギー Ek=½mv²\n速さが大きいほど運動エネルギーは大きくなる。",img:""},
+ {id:2,cat:"エネルギー",q:"位置エネルギーが大きくなるのはどれ？",ch:["高さが低い","高さが高い","速さが大きい","質量が0"],ans:["B"],ex:"位置エネルギー Ep=mgh\n高さが大きいほど位置エネルギーは大きくなる。",img:""},
+ {id:3,cat:"エネルギー",q:"電気エネルギーに必要な量をすべて選べ",ch:["電圧","電流","時間","高さ"],ans:["A","B","C"],ex:"電気エネルギー E=VIt（電圧×電流×時間）\n高さは関係しない。",img:""},
+ {id:4,cat:"エネルギー",q:"振り子が最下点を通るとき、最大になるのは？",ch:["位置エネルギー","運動エネルギー","力学的エネルギーの和","高さ"],ans:["B"],ex:"最下点では高さが最小、速さが最大。\n位置エネルギーが運動エネルギーに変換される（和は一定）。",img:""},
+ {id:5,cat:"補完編",q:"自由落下する物体の加速度は？（空気抵抗なし）",ch:["0","約9.8m/s²で一定","だんだん大きくなる","質量による"],ans:["B"],ex:"自由落下の加速度は重力加速度 g≒9.8m/s² で一定。質量によらない。",img:""},
+ {id:6,cat:"補完編",q:"水平投射で、水平方向の運動は？",ch:["等速直線運動","自由落下","等加速度運動","静止"],ans:["A"],ex:"水平方向は力がはたらかないので等速直線運動。鉛直方向は自由落下と同じ。",img:""},
+ {id:7,cat:"補完編",q:"鉛直投げ上げで、最高点での速さは？",ch:["最大","0","重力加速度と同じ","不定"],ans:["B"],ex:"最高点では一瞬速さが0になる。加速度は g のまま。",img:""},
+ {id:8,cat:"補完編",q:"力のモーメントを大きくする方法をすべて選べ",ch:["力を大きくする","回転軸からの距離を大きくする","力の向きを軸に向ける","質量を0にする"],ans:["A","B"],ex:"M=F×l（力×腕の長さ）。力を軸に向けると腕の長さが0になりモーメントは0。",img:""},
+ {id:9,cat:"補完編",q:"2力 3Nと4Nが直角にはたらくとき、合力の大きさは？",ch:["1N","5N","7N","12N"],ans:["B"],ex:"三平方の定理 √(3²+4²)=5N",img:""},
+ {id:10,cat:"番外編",q:"1gの水を1℃上げるのに必要な熱量は約？",ch:["1J","4.2J","42J","100J"],ans:["B"],ex:"水の比熱 約4.2J/(g・K)。Q=mcΔT",img:""}
+];
+
+/* ===================== xlsx 読込（外部ライブラリなし） ===================== */
+/*XLSX_START*/
+async function inflateRaw(u8){
+  const ds=new DecompressionStream("deflate-raw");
+  const w=ds.writable.getWriter(); w.write(u8); w.close();
+  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+}
+async function unzip(buf){
+  const u8=new Uint8Array(buf), dv=new DataView(buf);
+  let e=u8.length-22;
+  while(e>=0 && dv.getUint32(e,true)!==0x06054b50) e--;
+  if(e<0) throw new Error("xlsxファイルではありません");
+  const n=dv.getUint16(e+10,true); let p=dv.getUint32(e+16,true);
+  const files={}; const td=new TextDecoder("utf-8");
+  for(let i=0;i<n;i++){
+    const method=dv.getUint16(p+10,true), csize=dv.getUint32(p+20,true);
+    const nl=dv.getUint16(p+28,true), el=dv.getUint16(p+30,true), cl=dv.getUint16(p+32,true);
+    const off=dv.getUint32(p+42,true);
+    const name=td.decode(u8.subarray(p+46,p+46+nl));
+    const lnl=dv.getUint16(off+26,true), lel=dv.getUint16(off+28,true);
+    const start=off+30+lnl+lel;
+    const data=u8.subarray(start,start+csize);
+    files[name]={method,data};
+    p+=46+nl+el+cl;
+  }
+  async function get(name){
+    const f=files[name]; if(!f) return null;
+    const raw=f.method===0?f.data:await inflateRaw(f.data);
+    return td.decode(raw);
+  }
+  return {get,names:Object.keys(files)};
+}
+function colIdx(ref){
+  const m=/^([A-Z]+)/.exec(ref); let n=0;
+  for(const ch of m[1]) n=n*26+ch.charCodeAt(0)-64;
+  return n-1;
+}
+/* セルの文字列を取り出す。Excelで上付き・下付きにした部分は ^{…} / _{…} の印に直す。ふりがな(rPh)は除く */
+function siText(si){
+  const own=(el,tag)=>{ const a=[]; for(const c of el.childNodes) if(c.nodeType===1&&c.localName===tag) a.push(c); return a; };
+  const runs=own(si,"r");
+  if(!runs.length){ let t=""; for(const x of own(si,"t")) t+=x.textContent; return t; }
+  let out="";
+  for(const r of runs){
+    let t=""; for(const x of own(r,"t")) t+=x.textContent;
+    let va=""; const pr=own(r,"rPr")[0];
+    if(pr){ const v=own(pr,"vertAlign")[0]; if(v) va=v.getAttribute("val")||""; }
+    out+= !t ? "" : va==="superscript" ? "^{"+t+"}" : va==="subscript" ? "_{"+t+"}" : t;
+  }
+  return out.replace(/\}\^\{/g,"").replace(/\}_\{/g,"");
+}
+async function readXlsxRows(buf){
+  const z=await unzip(buf);
+  const P=new DOMParser();
+  const parse=s=>P.parseFromString(s,"application/xml");
+  const ss=[];
+  const sst=await z.get("xl/sharedStrings.xml");
+  if(sst){
+    for(const si of parse(sst).getElementsByTagName("si")){
+      ss.push(siText(si));
+    }
+  }
+  // 最初のシートを探す
+  let path="xl/worksheets/sheet1.xml";
+  const wb=await z.get("xl/workbook.xml"), rel=await z.get("xl/_rels/workbook.xml.rels");
+  if(wb&&rel){
+    const sh=parse(wb).getElementsByTagName("sheet")[0];
+    if(sh){
+      const rid=sh.getAttribute("r:id")||sh.getAttributeNS("http://schemas.openxmlformats.org/officeDocument/2006/relationships","id");
+      for(const r of parse(rel).getElementsByTagName("Relationship")){
+        if(r.getAttribute("Id")===rid){
+          let t=r.getAttribute("Target"); t=t.replace(/^\//,"");
+          path=t.startsWith("xl/")?t:"xl/"+t;
+        }
+      }
+    }
+  }
+  const xml=await z.get(path);
+  if(!xml) throw new Error("シートが見つかりません");
+  const rows=[];
+  for(const r of parse(xml).getElementsByTagName("row")){
+    const row=[];
+    for(const c of r.getElementsByTagName("c")){
+      const i=colIdx(c.getAttribute("r")), t=c.getAttribute("t");
+      let v="";
+      if(t==="inlineStr"){ const is=c.getElementsByTagName("is")[0]; v=is?siText(is):""; }
+      else{
+        const ve=c.getElementsByTagName("v")[0]; v=ve?ve.textContent:"";
+        if(t==="s") v=ss[parseInt(v,10)]??"";
+        else if((!t||t==="n")&&v!==""&&isFinite(Number(v))) v=String(parseFloat(Number(v).toPrecision(15))); // 9.8 が 9.800000000000001 と出ないよう、Excelの表示と同じ15桁に丸める
+      }
+      row[i]=v;
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+/* ---- 文字化け対策 ----
+   Excelの「挿入→記号」でSymbolフォントを選んだΩなどは、見た目は同じでも内部では別の文字コード（U+F0xx）になり、
+   ブラウザでは□になる。ここで通常のギリシャ文字・記号に変換する。
+   あわせて、オーム記号Ω(U+2126)→Ω(U+03A9)、Å(U+212B)→Å(U+00C5) など、同じ見た目の別コードも統一する。 */
+const SYMTAB=(()=>{
+  const m={}, up="ΑΒΧΔΕΦΓΗΙϑΚΛΜΝΟΠΘΡΣΤΥςΩΞΨΖ", lo="αβχδεφγηιϕκλμνοπθρστυϖωξψζ";
+  for(let i=0;i<26;i++){ m[65+i]=up[i]; m[97+i]=lo[i]; }
+  const x={0x2D:"−",0x40:"≅",0x5C:"∴",0x5E:"⊥",0x7E:"∼",0xA2:"′",0xA3:"≤",0xA5:"∞",0xAB:"↔",0xAC:"←",0xAD:"↑",0xAE:"→",0xAF:"↓",
+    0xB0:"°",0xB1:"±",0xB2:"″",0xB3:"≥",0xB4:"×",0xB5:"∝",0xB6:"∂",0xB7:"•",0xB8:"÷",0xB9:"≠",0xBA:"≡",0xBB:"≈",0xBC:"…",
+    0xC7:"∩",0xC8:"∪",0xCE:"∈",0xD1:"∇",0xD5:"∏",0xD6:"√",0xD7:"⋅",0xD8:"¬",0xD9:"∧",0xDA:"∨",0xE5:"∑",0xF2:"∫"};
+  for(const k in x) m[+k]=x[k];
+  return m;
+})();
+const SUPM={"⁰":"0","¹":"1","²":"2","³":"3","⁴":"4","⁵":"5","⁶":"6","⁷":"7","⁸":"8","⁹":"9","⁺":"+","⁻":"−","⁼":"=","⁽":"(","⁾":")","ⁿ":"n","ⁱ":"i"};
+const SUBM={"₀":"0","₁":"1","₂":"2","₃":"3","₄":"4","₅":"5","₆":"6","₇":"7","₈":"8","₉":"9","₊":"+","₋":"−","₌":"=","₍":"(","₎":")","ₐ":"a","ₑ":"e","ₒ":"o","ₓ":"x","ₙ":"n","ₖ":"k","ₘ":"m","ₚ":"p","ₛ":"s","ₜ":"t","ₕ":"h","ⱼ":"j"};
+function uniScripts(s){
+  return s.replace(/[⁰¹²³⁴⁵⁶⁷⁸⁹⁺⁻⁼⁽⁾ⁿⁱ]+/g,m=>"^{"+[...m].map(c=>SUPM[c]).join("")+"}")
+          .replace(/[₀-₉₊₋₌₍₎ₐₑₒₓₙₖₘₚₛₜₕⱼ]+/g,m=>"_{"+[...m].map(c=>SUBM[c]).join("")+"}");
+}
+function fixText(s){
+  s=String(s);
+  if(/[\uF020-\uF0FF]/.test(s)){
+    s=s.replace(/[\uF020-\uF0FF]/g,c=>{
+      const lo=c.charCodeAt(0)&0xFF;
+      return SYMTAB[lo]||(lo>=0x20&&lo<=0x7E?String.fromCharCode(lo):c);
+    });
+  }
+  return uniScripts(s.normalize("NFC"));
+}
+function rowsToProblems(rows){
+  if(!rows.length) throw new Error("データがありません");
+  const hdr=(rows[0]||[]).map(x=>String(x||"").trim());
+  const find=(...names)=>{for(const n of names){const i=hdr.indexOf(n); if(i>=0) return i;} return -1;};
+  const ix={id:find("ID","id"),q:find("問題文","問題"),A:find("A"),B:find("B"),C:find("C"),D:find("D"),
+            ans:find("正解","答え"),ex:find("解説"),img:find("画像"),cat:find("分類","単元","カテゴリ")};
+  if(ix.q<0||ix.ans<0) throw new Error("ヘッダに「問題文」「正解」が必要です");
+  const out=[];
+  for(let r=1;r<rows.length;r++){
+    const row=rows[r]||[]; const g=i=>i<0?"":fixText(row[i]??"").trim();
+    const q=g(ix.q); if(!q) continue;
+    const ch=[g(ix.A),g(ix.B),g(ix.C),g(ix.D)];
+    const ans=g(ix.ans).toUpperCase().replace(/[Ａ-Ｄ]/g,s=>String.fromCharCode(s.charCodeAt(0)-0xFEE0))
+      .split(/[^ABCD]+/).join("").split("").filter((x,i,a)=>a.indexOf(x)===i);
+    if(!ans.length) continue;
+    let img=g(ix.img).replace(/^画像\s*/,"");
+    out.push({id:g(ix.id)||String(r),cat:g(ix.cat)||"",q,ch,ans,ex:g(ix.ex).replace(/\\n/g,"\n"),img});
+  }
+  if(!out.length) throw new Error("有効な問題が見つかりません");
+  return out;
+}
+/*XLSX_END*/
+
+/*XLSXW_START*/
+/* ---- xlsx 書き出し（外部ライブラリなし・無圧縮ZIP） ---- */
+const CRC_T=(()=>{const t=new Uint32Array(256);for(let n=0;n<256;n++){let c=n;for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;t[n]=c>>>0;}return t;})();
+function crc32(u8){let c=0xFFFFFFFF;for(let i=0;i<u8.length;i++)c=CRC_T[(c^u8[i])&255]^(c>>>8);return (c^0xFFFFFFFF)>>>0;}
+function zipStore(files){
+  const enc=new TextEncoder(), parts=[], cen=[]; let off=0;
+  const d=new Date();
+  const dt=((d.getHours()<<11)|(d.getMinutes()<<5)|(d.getSeconds()>>1))&0xFFFF;
+  const dd=(((d.getFullYear()-1980)<<9)|((d.getMonth()+1)<<5)|d.getDate())&0xFFFF;
+  for(const f of files){
+    const nm=enc.encode(f.name), crc=crc32(f.data), sz=f.data.length;
+    const lh=new DataView(new ArrayBuffer(30));
+    lh.setUint32(0,0x04034b50,true);lh.setUint16(4,20,true);lh.setUint16(6,0x0800,true);lh.setUint16(8,0,true);
+    lh.setUint16(10,dt,true);lh.setUint16(12,dd,true);lh.setUint32(14,crc,true);lh.setUint32(18,sz,true);lh.setUint32(22,sz,true);
+    lh.setUint16(26,nm.length,true);lh.setUint16(28,0,true);
+    parts.push(new Uint8Array(lh.buffer),nm,f.data);
+    const ch=new DataView(new ArrayBuffer(46));
+    ch.setUint32(0,0x02014b50,true);ch.setUint16(4,20,true);ch.setUint16(6,20,true);ch.setUint16(8,0x0800,true);ch.setUint16(10,0,true);
+    ch.setUint16(12,dt,true);ch.setUint16(14,dd,true);ch.setUint32(16,crc,true);ch.setUint32(20,sz,true);ch.setUint32(24,sz,true);
+    ch.setUint16(28,nm.length,true);ch.setUint32(42,off,true);
+    cen.push(new Uint8Array(ch.buffer),nm);
+    off+=30+nm.length+sz;
+  }
+  let cs=0; for(const c of cen) cs+=c.length;
+  const e=new DataView(new ArrayBuffer(22));
+  e.setUint32(0,0x06054b50,true);e.setUint16(8,files.length,true);e.setUint16(10,files.length,true);e.setUint32(12,cs,true);e.setUint32(16,off,true);
+  return new Blob([...parts,...cen,new Uint8Array(e.buffer)],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
+}
+function xmlEsc(s){
+  return String(s).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F]/g,"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+}
+function colL(i){let s="";i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
+function sheetXml(rows,widths){
+  const nc=Math.max(1,...rows.map(r=>r.length));
+  let x='<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A2" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews><sheetFormatPr defaultRowHeight="15"/>';
+  if(widths) x+="<cols>"+widths.map((w,i)=>`<col min="${i+1}" max="${i+1}" width="${w}" customWidth="1"/>`).join("")+"</cols>";
+  x+="<sheetData>";
+  rows.forEach((r,ri)=>{
+    x+=`<row r="${ri+1}">`;
+    r.forEach((v,ci)=>{
+      if(v===""||v==null) return;
+      const ref=colL(ci)+(ri+1);
+      if(typeof v==="number"&&isFinite(v)) x+=`<c r="${ref}"><v>${v}</v></c>`;
+      else x+=`<c r="${ref}" t="inlineStr"${ri===0?' s="1"':""}><is><t xml:space="preserve">${xmlEsc(v)}</t></is></c>`;
+    });
+    x+="</row>";
+  });
+  x+="</sheetData>";
+  if(rows.length>1) x+=`<autoFilter ref="A1:${colL(nc-1)}${rows.length}"/>`;
+  return x+"</worksheet>";
+}
+function buildXlsx(sheets){
+  const enc=new TextEncoder(), F=(n,s)=>({name:n,data:enc.encode(s)});
+  const H='<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
+  const NS='xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"';
+  const RT="http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+  const files=[
+    F("[Content_Types].xml",H+'<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>'+
+      sheets.map((s,i)=>`<Override PartName="/xl/worksheets/sheet${i+1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("")+
+      '<Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>'),
+    F("_rels/.rels",H+`<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${RT}/officeDocument" Target="xl/workbook.xml"/></Relationships>`),
+    F("xl/workbook.xml",H+`<workbook ${NS} xmlns:r="${RT}"><sheets>`+sheets.map((s,i)=>`<sheet name="${xmlEsc(s.name)}" sheetId="${i+1}" r:id="rId${i+1}"/>`).join("")+"</sheets></workbook>"),
+    F("xl/_rels/workbook.xml.rels",H+'<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">'+
+      sheets.map((s,i)=>`<Relationship Id="rId${i+1}" Type="${RT}/worksheet" Target="worksheets/sheet${i+1}.xml"/>`).join("")+
+      `<Relationship Id="rId${sheets.length+1}" Type="${RT}/styles" Target="styles.xml"/></Relationships>`),
+    F("xl/styles.xml",H+`<styleSheet ${NS}><fonts count="2"><font><sz val="11"/><name val="Yu Gothic"/></font><font><b/><sz val="11"/><name val="Yu Gothic"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="2"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/></cellXfs><cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles></styleSheet>`),
+    ...sheets.map((s,i)=>F(`xl/worksheets/sheet${i+1}.xml`,sheetXml(s.rows,s.widths)))
+  ];
+  return zipStore(files);
+}
+function toCsv(rows){
+  return "﻿"+rows.map(r=>r.map(v=>{
+    let s=v==null?"":String(v);
+    if(typeof v==="string"&&/^[=+@\-]/.test(s)) s="'"+s;
+    return /[",\r\n]/.test(s)?'"'+s.replace(/"/g,'""')+'"':s;
+  }).join(",")).join("\r\n")+"\r\n";
+}
+/*XLSXW_END*/
+
+/* ===================== 状態 ===================== */
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+let bank=SAMPLE.slice();
+let cfg={mode:"pair",players:4};
+let zones=[];
+/* ---- 生徒・履歴（この端末のブラウザに保存） ---- */
+const SKEY="pta_students_v1", HKEY="pta_hist_v2", AKEY="pta_assign_v1";
+function load(k,d){try{const v=JSON.parse(localStorage.getItem(k));return v??d;}catch(e){return d;}}
+function save(k,v){try{localStorage.setItem(k,JSON.stringify(v));}catch(e){}}
+const ZKEY="pta_zcfg_v1";
+let STU=load(SKEY,[]), HS=load(HKEY,{}), ASSIGN=load(AKEY,[]), ZC=load(ZKEY,[]);
+function keyOf(p){let s=p.q+"|"+p.ch.join("|"),x=5381;for(let i=0;i<s.length;i++)x=((x<<5)+x+s.charCodeAt(i))|0;return p.id+"#"+(x>>>0).toString(36);}
+function wrongPoolFor(sid){
+  if(!sid) return [];
+  const h=HS[sid]||{};
+  return bank.filter(p=>{const r=h[keyOf(p)];return r&&r.last==="w";});
+}
+function answeredCount(sid){return Object.keys(HS[sid]||{}).length;}
+function recordResult(p,right,sid){
+  if(!sid) return;
+  const h=HS[sid]||(HS[sid]={}), k=keyOf(p), r=h[k]||(h[k]={r:0,w:0,last:"",t:0});
+  right?r.r++:r.w++; r.last=right?"r":"w"; r.t=Date.now(); save(HKEY,HS);
+}
+function nSlots(){return cfg.mode==="solo"?1:cfg.mode==="pair"?2:cfg.players;}
+function slotSid(i){const s=ASSIGN[i];return s&&STU.includes(s)?s:null;}
+function zoneName(z){
+  const P=PLAYERS[z.i];
+  if(cfg.mode==="solo") return z.sid||"プレイヤー";
+  if(cfg.mode==="board") return P.n+(z.sid?" "+z.sid:"");
+  return P.n+"（"+P.name+"）"+(z.sid?" "+z.sid:"");
+}
+/* ---- モーダル ---- */
+function openModal(html,onBtn){
+  $("#modalBox").innerHTML=html; $("#modal").classList.add("show");
+  $("#modalBox").onclick=e=>{const b=e.target.closest("button"); if(!b) return; if(onBtn(b)!==false) closeModal();};
+}
+function closeModal(){$("#modal").classList.remove("show");}
+function askConfirm(msg,sub,yesLabel,fn){
+  openModal(`<div class="mt">${msg}</div><div class="msub">${sub||""}</div><div class="mbtns"><button class="cbtn yes" data-y="1">${yesLabel}</button><button class="cbtn no">やめる</button></div>`,
+    b=>{if(b.dataset.y) fn(); return true;});
+}
+/* ---- 履歴の書き出し ---- */
+function p2(n){return String(n).padStart(2,"0");}
+function fmtDT(t){if(!t) return ""; const d=new Date(t); return `${d.getFullYear()}-${p2(d.getMonth()+1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}`;}
+function stamp(){const d=new Date(); return `${d.getFullYear()}${p2(d.getMonth()+1)}${p2(d.getDate())}-${p2(d.getHours())}${p2(d.getMinutes())}`;}
+function pct(r,w){return r+w?Math.round(r/(r+w)*1000)/10:"";}
+function buildExport(){
+  const map=new Map(bank.map(p=>[keyOf(p),p]));
+  const now=fmtDT(Date.now());
+  const sids=[...new Set([...STU,...Object.keys(HS)])].sort();
+  const summary=[["生徒番号","回答した問題数","延べ回答数","正解数","不正解数","正答率(%)","要復習の問題数","最終回答日時","出力日時"]];
+  const detail=[["生徒番号","問題ID","分類","問題文","正解","回答回数","正解回数","不正解回数","正答率(%)","最後の結果","要復習","最終回答日時","出力日時"]];
+  for(const sid of sids){
+    const h=HS[sid]||{}; const rows=[];
+    for(const p of bank){ const r=h[keyOf(p)]; if(r) rows.push([p,r]); }
+    for(const k of Object.keys(h)){ if(!map.has(k)) rows.push([{id:k.split("#")[0],cat:"",q:"（現在の問題ファイルに無い問題）",ans:[]},h[k]]); }
+    let R=0,W=0,last=0,wrong=0;
+    for(const [p,r] of rows){
+      R+=r.r; W+=r.w; last=Math.max(last,r.t||0); if(r.last==="w") wrong++;
+      detail.push([sid,/^\d+$/.test(String(p.id))?+p.id:p.id,p.cat||"",p.q,p.ans.join(","),r.r+r.w,r.r,r.w,pct(r.r,r.w),r.last==="w"?"×":r.last==="r"?"○":"",r.last==="w"?"○":"",fmtDT(r.t),now]);
+    }
+    summary.push([sid,rows.length,R+W,R,W,pct(R,W),wrong,fmtDT(last),now]);
+  }
+  return {summary,detail};
+}
+function makeXlsxBlob(){
+  const {summary,detail}=buildExport();
+  return buildXlsx([
+    {name:"生徒別集計",rows:summary,widths:[10,14,12,10,10,10,14,18,18]},
+    {name:"問題別詳細",rows:detail,widths:[10,8,12,50,8,10,10,12,10,10,8,18,18]}
+  ]);
+}
+function makeCsvBlob(){
+  return new Blob([toCsv(buildExport().detail)],{type:"text/csv;charset=utf-8"});
+}
+function download(name,blob){
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=name;
+  document.body.appendChild(a); a.click();
+  setTimeout(()=>{URL.revokeObjectURL(a.href); a.remove();},1500);
+}
+function safeName(raw,kind){
+  let n=String(raw||"").replace(/[\\/:*?"<>|\u0000-\u001f]/g,"_").trim();
+  n=n.replace(/\.(xlsx|csv)$/i,"").replace(/[. ]+$/,"").slice(0,80);
+  if(!n) n="PTA_history_"+stamp();
+  return n+"."+kind;
+}
+function doExport(kind){
+  const msg=$("#stuMsg");
+  try{
+    const name=safeName($("#expName").value,kind);
+    download(name,kind==="xlsx"?makeXlsxBlob():makeCsvBlob());
+    msg.className=""; msg.textContent=`書き出しました: ${name}（ダウンロードフォルダを確認）`;
+  }catch(e){msg.className="err"; msg.textContent="書き出しに失敗しました: "+e.message;}
+}
+
+/* ---- 生徒の登録・削除 ---- */
+function parseIds(str){
+  const out=[],bad=[];
+  for(const t of String(str).split(/[\s,、，]+/).filter(Boolean)){
+    let m;
+    if(/^\d{4}$/.test(t)) out.push(t);
+    else if((m=/^(\d{4})[-〜~ー－](\d{4})$/.exec(t))&&+m[1]<=+m[2]&&+m[2]-+m[1]<300){
+      for(let n=+m[1];n<=+m[2];n++) out.push(String(n).padStart(4,"0"));
+    } else bad.push(t);
+  }
+  return {out,bad};
+}
+function addStudents(str){
+  const {out,bad}=parseIds(str);
+  let added=0,dup=0;
+  for(const s of out){ if(STU.includes(s)) dup++; else if(STU.length<400){STU.push(s);added++;} }
+  STU.sort(); save(SKEY,STU);
+  return {added,dup,bad};
+}
+function clearHist(sid){delete HS[sid]; save(HKEY,HS);}
+function deleteStudent(sid){
+  STU=STU.filter(s=>s!==sid); delete HS[sid]; ASSIGN=ASSIGN.map(v=>v===sid?null:v);
+  save(SKEY,STU); save(HKEY,HS); save(AKEY,ASSIGN);
+}
+function renderStudents(){
+  $("#stuCount").textContent=`登録生徒 ${STU.length}人`;
+  $("#btnAllClear").disabled=!Object.keys(HS).length;
+  $("#btnExpXlsx").disabled=$("#btnExpCsv").disabled=!(STU.length||Object.keys(HS).length);
+  $("#stuList").innerHTML=STU.length?STU.map(s=>{const w=wrongPoolFor(s).length;
+    return `<div class="srow"><b>${s}</b><span class="st">回答履歴 ${answeredCount(s)}問${w?` ／ <em>要復習 ${w}問</em>`:""}</span>`+
+    `<button class="ghost" data-act="clr" data-sid="${s}">履歴を消す</button><button class="ghost dng" data-act="del" data-sid="${s}">登録を削除</button></div>`;}).join(""):
+    `<div class="stlbl">まだ登録がありません。左で番号を入力してください。</div>`;
+}
+function setStatus(t,err){const s=$("#status");s.textContent=t;s.className=err?"err":"";}
+function show(id){$$(".screen").forEach(s=>s.classList.toggle("active",s.id===id));}
+
+/* ===================== スタートメニュー ===================== */
+function refreshMenu(){
+  $$(".modebtn").forEach(b=>b.classList.toggle("sel",b.dataset.mode===cfg.mode));
+  $("#rowPlayers").style.display=cfg.mode==="board"?"flex":"none";
+  $$("#rowPlayers .chip").forEach(b=>b.classList.toggle("sel",+b.dataset.n===cfg.players));
+  $("#stuInfo").textContent=`登録 ${STU.length}人`;
+  setStatus(`問題数: ${bank.length}問`+(bank===SAMPLE?"（内蔵サンプル）":""));
+}
+$$(".modebtn").forEach(b=>b.onclick=()=>{cfg.mode=b.dataset.mode;refreshMenu();});
+$$("#rowPlayers .chip").forEach(b=>b.onclick=()=>{cfg.players=+b.dataset.n;refreshMenu();});
+$("#btnLoad").onclick=()=>$("#file").click();
+$("#btnSample").onclick=()=>{bank=SAMPLE.slice();refreshMenu();};
+$("#file").onchange=async e=>{
+  const f=e.target.files[0]; if(!f) return;
+  try{
+    if(typeof DecompressionStream==="undefined") throw new Error("このブラウザはxlsx読込に未対応です（Edge/Chromeの最新版を使用）");
+    const rows=await readXlsxRows(await f.arrayBuffer());
+    bank=rowsToProblems(rows); refreshMenu();
+    setStatus(`${f.name} を読み込みました: ${bank.length}問`);
+  }catch(err){setStatus("読み込み失敗: "+err.message,true);}
+  e.target.value="";
+};
+
+/* ===================== ゲーム構築 ===================== */
+function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function startGame(){
+  const n=nSlots();
+  zones=Array.from({length:n},(_,i)=>({
+    i,deck:[],sid:slotSid(i),
+    cfg:Object.assign({count:10,order:"rnd",cat:"all"},ZC[i]||{},{review:false}),
+    idx:0,score:0,state:"menu",menuView:"main",sel:new Set(),correct:0,hist:[]
+  }));
+  const g=$("#grid"); g.innerHTML="";
+  const cols=n===1?1:n===2?2:n<=4?2:4, rows=Math.ceil(n/cols);
+  g.style.gridTemplateColumns=`repeat(${cols},1fr)`; g.style.gridTemplateRows=`repeat(${rows},1fr)`;
+  $("#modeLbl").textContent={solo:"個人モード",pair:"ペアモード",board:"電子黒板モード"}[cfg.mode];
+  zones.forEach(z=>{
+    const P=PLAYERS[z.i];
+    const el=document.createElement("div"); el.className="zone"; el.style.setProperty("--pc",P.c);
+    el.innerHTML=`<div class="zhead"><span class="znm"></span><span class="zprog"></span>
+      <span class="zbtns"><button class="zbtn" data-act="prev">◀</button><button class="zbtn" data-act="next">▶</button><button class="zbtn endb" data-act="end">✕</button></span></div>
+      <div class="zbody"></div><div class="result"></div><div class="finish"></div><div class="confirm"></div><div class="imgv"></div><div class="zrail"><button class="scbtn" data-sc="-1">▲</button><button class="scbtn" data-sc="1">▼</button></div>`;
+    g.appendChild(el); z.el=el; z.nm=el.querySelector(".znm"); z.body=el.querySelector(".zbody"); z.res=el.querySelector(".result");
+    z.fin=el.querySelector(".finish"); z.prog=el.querySelector(".zprog"); z.conf=el.querySelector(".confirm");
+    z.imgv=el.querySelector(".imgv"); z.rail=el.querySelector(".zrail");
+    el.addEventListener("scroll",()=>railState(z),true);
+  });
+  zones.forEach(renderMenu);
+  renderScore(); show("game");
+  requestAnimationFrame(()=>zones.forEach(updateRail));
+}
+
+/* ===================== 文字サイズの自動調整 =====================
+   選択肢の枠は固定サイズ。中の文字を、枠に収まる最大の大きさに自動で調整する。
+   問題文も、画面内に収まる大きさまで自動で小さくする（最小サイズでも収まらないときだけ ▲▼ でスクロール）。 */
+const FIT={q:13,c:10,e:12};
+function pxBase(z){
+  const H=z.el.clientHeight,W=z.el.clientWidth;
+  return {H,W,q:Math.min(7*H/100,6*W/100),c:Math.min(6.5*H/100,5.2*W/100),e:Math.min(6*H/100,4.8*W/100)};
+}
+function fitChoices(z,B){
+  const ch=z.body.querySelector(".choices"); if(!ch) return;
+  const items=[...ch.querySelectorAll(".choice")], n=items.length; if(!n) return;
+  const rowH2=0.19*B.H, rowH1=(n>2?0.125:0.19)*B.H;
+  const apply=cols=>{
+    ch.classList.toggle("one",cols===1);
+    ch.style.gridTemplateColumns=cols===1?"1fr":"1fr 1fr";
+    ch.style.gridTemplateRows=`repeat(${Math.ceil(n/cols)},${cols===1?rowH1:rowH2}px)`;
+    let fs=B.c;
+    const fits=()=>items.every(it=>{
+      const cs=getComputedStyle(it), avail=it.clientHeight-parseFloat(cs.paddingTop)-parseFloat(cs.paddingBottom);
+      const tx=it.querySelector(".tx");
+      return tx.scrollHeight<=avail+1&&tx.scrollWidth<=tx.clientWidth+1&&1.7*fs<=avail+1;
+    });
+    for(let i=0;i<40;i++){
+      items.forEach(it=>it.style.fontSize=fs+"px");
+      if(fits()||fs<=FIT.c) break;
+      fs=Math.max(FIT.c,fs*0.93);
+    }
+    return fs;
+  };
+  let cols=n<=2?1:2, fs=apply(cols);
+  if(n>2&&fs<B.c*0.7){ const f1=apply(1); if(f1>=fs*1.2) fs=f1; else apply(2); }   // 長い選択肢は1列にする
+}
+function fitQuestion(z){
+  const B=pxBase(z); if(!B.H||!B.W) return;
+  const body=z.body, qt=body.querySelector(".qtext"); if(!qt) return;
+  const im=body.querySelector(".qimg"), over=()=>body.scrollHeight>body.clientHeight+1;
+  fitChoices(z,B);
+  if(im) im.style.height=Math.max(90,0.26*B.H)+"px";
+  let fs=B.q; qt.style.fontSize=fs+"px";
+  const shrink=lim=>{for(let i=0;i<60&&over()&&fs>lim;i++){fs=Math.max(lim,fs*0.94);qt.style.fontSize=fs+"px";}};
+  shrink(Math.max(FIT.q,B.q*0.7));
+  if(im&&over()){ let k=0.26; while(over()&&k>0.14){ k-=0.04; im.style.height=Math.max(60,k*B.H)+"px"; } }
+  if(over()) shrink(FIT.q);
+}
+function fitExpl(z){
+  const B=pxBase(z), ex=z.res.querySelector(".expl"); if(!ex||!B.H) return;
+  let fs=B.e; ex.style.fontSize=fs+"px";
+  for(let i=0;i<60&&ex.scrollHeight>ex.clientHeight+1&&fs>FIT.e;i++){fs=Math.max(FIT.e,fs*0.94);ex.style.fontSize=fs+"px";}
+}
+function fitZone(z){
+  if(!z||!z.el) return;
+  if(z.state==="ask"||z.state==="done") fitQuestion(z);
+  if(z.res.classList.contains("show")) fitExpl(z);
+}
+
+/* ===================== 上下スクロール（タップ用ボタン） ===================== */
+function scroller(z){
+  if(z.state==="menu") return z.body.querySelector(".zmenu");
+  if(z.res.classList.contains("show")) return z.res.querySelector(".expl");
+  return z.body;
+}
+function updateRail(z){
+  if(!z||!z.el||!z.rail) return;
+  const blocked=z.state==="end"||z.conf.classList.contains("show")||z.imgv.classList.contains("show");
+  const cur=scroller(z), keep=cur?cur.scrollTop:0;     // 余白の付け外しで位置が上に戻らないよう覚えておく
+  z.el.classList.remove("ovf");
+  const s=blocked?null:scroller(z);
+  if(s&&s.scrollHeight>s.clientHeight+4) z.el.classList.add("ovf");
+  if(cur&&cur.scrollTop!==keep) cur.scrollTop=keep;
+  railState(z);
+}
+function railState(z){
+  const s=scroller(z); if(!s||!z.rail) return;
+  const b=z.rail.querySelectorAll(".scbtn"); if(b.length<2) return;
+  b[0].classList.toggle("off",s.scrollTop<=2);
+  b[1].classList.toggle("off",s.scrollTop+s.clientHeight>=s.scrollHeight-2);
+}
+function zRail(i){ if(zones[i]){ fitZone(zones[i]); updateRail(zones[i]); } }
+window.addEventListener("resize",()=>zones.forEach(z=>{fitZone(z);updateRail(z);}));
+
+/* ===================== 各自のメニュー（自由進度） ===================== */
+function catList(){return [...new Set(bank.map(p=>p.cat).filter(Boolean))];}
+function poolFor(z){
+  const c=z.cfg;
+  if(c.review) return wrongPoolFor(z.sid);
+  return (c.cat==="all"||!catList().includes(c.cat))?bank.slice():bank.filter(p=>p.cat===c.cat);
+}
+function mb(k,v,label,on,dis){
+  return `<button class="mb${on?" on":""}${dis?" dis":""}" data-k="${k}" data-v="${esc(String(v))}">${label}</button>`;
+}
+function persistZ(){
+  zones.forEach((z,i)=>{ASSIGN[i]=z.sid||null; ZC[i]={count:z.cfg.count,order:z.cfg.order,cat:z.cfg.cat};});
+  save(AKEY,ASSIGN); save(ZKEY,ZC);
+}
+function renderMenu(z){
+  z.state="menu";
+  z.res.classList.remove("show"); z.fin.classList.remove("show"); z.conf.classList.remove("show");
+  z.el.classList.add("inmenu"); z.prog.textContent=""; z.nm.textContent=zoneName(z); z.imgv.classList.remove("show");
+  const oldM=z.body.querySelector(".zmenu"), keepTop=(oldM&&z._mv===z.menuView)?oldM.scrollTop:0; z._mv=z.menuView;   // 選択のたびに上へ戻らないよう、スクロール位置を覚えておく
+  const c=z.cfg, wn=wrongPoolFor(z.sid).length;
+  if(c.review&&!wn) c.review=false;
+  if(z.menuView==="stu"){
+    const used=new Set(zones.filter(o=>o!==z&&o.sid).map(o=>o.sid));
+    z.body.innerHTML=`<div class="zmenu"><div class="mtt">生徒番号を選ぶ</div>`+
+      (STU.length?`<div class="mgrid2">`+STU.slice().sort().map(s=>{const w=wrongPoolFor(s).length;
+        return mb("sid",s,s+(w?`<small>復習${w}</small>`:""),z.sid===s,used.has(s));}).join("")+`</div>`
+        :`<div class="ml">未登録です（スタートメニュー →「生徒の登録・管理」）</div>`)+
+      `<div class="mrow">${mb("sid","","ゲスト（記録なし）",!z.sid)}${mb("view","main","戻る",false)}</div></div>`;
+    updateRail(z);
+    { const nm=z.body.querySelector(".zmenu"); if(nm){ nm.scrollTop=keepTop; railState(z); } }
+    return;
+  }
+  const cats=catList(), pool=poolFor(z);
+  let m=`<div class="zmenu">`;
+  m+=`<div class="mrow"><span class="ml">生徒</span>${mb("view","stu",(z.sid||"ゲスト")+" ▼",false)}</div>`;
+  m+=`<div class="mrow"><span class="ml">出題</span>${mb("rev","0","通常",!c.review)}${mb("rev","1","復習"+(wn?` <small>${wn}問</small>`:""),c.review,!wn)}</div>`;
+  m+=`<div class="mrow"><span class="ml">問題数</span>${[5,10,0].map(n=>mb("cnt",n,n?n:"全問",c.count===n)).join("")}</div>`;
+  m+=`<div class="mrow"><span class="ml">順序</span>${mb("ord","seq","順番",c.order==="seq")}${mb("ord","rnd","ランダム",c.order==="rnd")}</div>`;
+  if(!c.review&&cats.length) m+=`<div class="mrow"><span class="ml">範囲</span>${["all",...cats].map(k=>mb("cat",k,k==="all"?"すべて":rt(k),c.cat===k||(k==="all"&&!cats.includes(c.cat)))).join("")}</div>`;
+  const n=Math.min(pool.length,c.count>0?c.count:pool.length);
+  m+=`<button class="mb start${pool.length?"":" dis"}" data-k="start" data-v="">${pool.length?`スタート（${n}問）`:"出題できる問題がありません"}</button></div>`;
+  z.body.innerHTML=m;
+  updateRail(z);
+  { const nm=z.body.querySelector(".zmenu"); if(nm){ nm.scrollTop=keepTop; railState(z); } }
+}
+function menuAct(z,k,v){
+  if(z.state!=="menu") return;
+  const c=z.cfg;
+  if(k==="view") z.menuView=v;
+  else if(k==="sid"){
+    if(v&&zones.some(o=>o!==z&&o.sid===v)) return;      // 他の枠で使用中
+    z.sid=v||null; z.menuView="main";
+    if(!wrongPoolFor(z.sid).length) c.review=false;
+  }
+  else if(k==="rev") c.review=(v==="1");
+  else if(k==="cnt") c.count=+v;
+  else if(k==="ord") c.order=v;
+  else if(k==="cat") c.cat=v;
+  else if(k==="start"){ if(poolFor(z).length){ persistZ(); startZone(z); } return; }
+  persistZ(); renderMenu(z);
+}
+function startZone(z){
+  const c=z.cfg; let pool=poolFor(z); if(!pool.length) return;
+  if(c.order==="rnd") pool=shuffle(pool);
+  z.deck=c.count>0?pool.slice(0,c.count):pool;
+  z.review=c.review; z.menuView="main";
+  z.idx=0; z.score=0; z.correct=0; z.hist=[]; z.sel=new Set();
+  z.el.classList.remove("inmenu");
+  renderQ(z); renderScore();
+}
+function renderScore(){
+  $("#scoreBar").innerHTML=zones.map(z=>`<b style="background:${PLAYERS[z.i].c}">${zones.length===1?(z.sid||"得点"):PLAYERS[z.i].n+(z.sid?" "+z.sid:"")} ${z.score}点</b>`).join("");
+}
+// 選択肢は、空白で区切った「かたまり」ごとに折り返す（①熱量 ②内部エネルギー のように、語の途中で切らない）
+/* 上付き・下付き: ^{2} _{0} のほか、v^2 / x^-2 / v_0 / x_n のような簡単な書き方も使える */
+function rt(t){
+  return esc(t)
+    .replace(/\^\{([^}]*)\}/g,(m,a)=>"<sup>"+a.replace(/\s/g,"\u00a0")+"</sup>")
+    .replace(/_\{([^}]*)\}/g,(m,a)=>"<sub>"+a.replace(/\s/g,"\u00a0")+"</sub>")
+    .replace(/\^([+\-−]?\d+|[A-Za-z])/g,"<sup>$1</sup>")
+    .replace(/_([+\-−]?\d+|[A-Za-z])/g,"<sub>$1</sub>");
+}
+function segs(t){
+  t=String(t).replace(/([\^_])\{([^}]*)\}/g,(m,c,a)=>c+"{"+a.replace(/\s/g,"\u00a0")+"}");
+  return t.split(/[\s\u3000]+/).filter(Boolean).map(s=>`<span class="seg">${rt(s)}</span>`).join(" ");
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));}
+
+function unansweredIdx(z){
+  const r=[]; for(let i=0;i<z.deck.length;i++){ if(!(z.hist[i]&&z.hist[i].done)) r.push(i); } return r;
+}
+function markSkip(z){
+  if(z.state==="ask") z.hist[z.idx]={sel:new Set(z.sel),done:false,skipped:true};
+}
+function renderQ(z){
+  const p=z.deck[z.idx], h=z.hist[z.idx];
+  z.sel=new Set(h?h.sel:[]); z.state=(h&&h.done)?"done":"ask";
+  z.res.classList.remove("show"); z.fin.classList.remove("show"); z.conf.classList.remove("show");
+  z.prog.textContent=`${z.review?"復習 ":""}${z.idx+1} / ${z.deck.length}`;
+  const multi=p.ans.length>1, skipped=h&&!h.done&&h.skipped;
+  const chs=p.ch.map((t,i)=>({t,L:LETTERS[i]})).filter(o=>o.t!=="");
+  const hasImg=!!p.img;
+  z.body.innerHTML=
+    `<div class="qtext">${skipped?'<span class="tag" style="background:#92400e">飛ばした問題</span>':""}${multi?'<span class="tag">複数選択</span>':""}${rt(p.q)}</div>`+
+    (hasImg?`<div class="qimg"><img alt="" src="images/${encodeURI(p.img)}" onload="zRail(${z.i})" onerror="this.parentNode.style.display='none';zRail(${z.i})"></div>`:"")+
+    `<div class="choices ${chs.length<=2?"one":""}">`+
+    chs.map(o=>`<button class="choice ${multi?"multi":""}" data-l="${o.L}"><span class="mk">${multi?"":o.L}</span><span class="tx">${segs(o.t)}</span></button>`).join("")+
+    `</div>`+(multi?`<button class="submit" disabled>決定</button>`:"");
+  z.body.scrollTop=0; z.imgv.classList.remove("show");
+  if(z.state==="done") showResult(z,h.right);
+  else if(multi&&z.sel.size){
+    z.body.querySelectorAll(".choice").forEach(b=>{if(z.sel.has(b.dataset.l)) b.classList.add("on");});
+    z.body.querySelector(".submit").disabled=false;
+  }
+  updateNav(z); checkAllEnded(); fitZone(z); updateRail(z);
+}
+function updateNav(z){
+  z.el.querySelector('[data-act="prev"]').classList.toggle("off",z.state!=="end"&&z.idx===0);
+}
+
+/* ===================== 判定 ===================== */
+function judge(z){
+  const p=z.deck[z.idx];
+  const right=p.ans.slice().sort().join("")===[...z.sel].sort().join("");
+  z.state="done";
+  z.hist[z.idx]={sel:new Set(z.sel),done:true,right};
+  recordResult(p,right,z.sid);
+  if(right){z.score++;z.correct++;renderScore();}
+  showResult(z,right);
+}
+function showResult(z,right){
+  const p=z.deck[z.idx];
+  z.body.querySelectorAll(".choice").forEach(b=>{
+    const L=b.dataset.l, isAns=p.ans.includes(L), picked=z.sel.has(L);
+    b.classList.remove("on","right","wrong","miss","dim");
+    if(picked&&isAns) b.classList.add("right");
+    else if(picked&&!isAns) b.classList.add("wrong");
+    else if(!picked&&isAns) b.classList.add("miss");
+    else b.classList.add("dim");
+  });
+  const sb=z.body.querySelector(".submit"); if(sb) sb.disabled=true;
+  const un=unansweredIdx(z);
+  const label=un.some(i=>i>z.idx)?"次の問題へ":(un.length?"飛ばした問題へ":"終了する");
+  const ansTxt=p.ans.map(L=>L+"："+p.ch[LETTERS.indexOf(L)]).join(" / ");
+  z.res.innerHTML=
+    `<div class="verdict ${right?"ok":"ng"}">${right?"○ 正解":"× 不正解"}</div>`+
+    `<div class="expl"><div class="ans">正解 ${rt(ansTxt)}</div>${rt(p.ex||"").replace(/\n/g,"<br>")}</div>`+
+    `<button class="nextbtn">${label}</button>`;
+  z.res.classList.add("show"); fitExpl(z); updateRail(z);
+}
+
+/* ===================== 枠ごとの 戻る/進む/終了/やり直し ===================== */
+// 回答後の「次へ」: 先の未回答 → 飛ばした未回答（自動で出る） → 全部済んだら終了
+function advance(z){
+  const un=unansweredIdx(z);
+  const nx=un.find(i=>i>z.idx);
+  const t=nx!==undefined?nx:un[0];
+  if(t===undefined) finishZone(z); else {z.idx=t;renderQ(z);}
+}
+function finishZone(z){
+  z.state="end"; z.res.classList.remove("show"); z.conf.classList.remove("show");
+  const left=unansweredIdx(z).length;
+  z.fin.innerHTML=`<div class="sm">終了</div><div class="big2">${z.correct} / ${z.deck.length}</div>`+
+    `<div class="sm">${z.score}点${left?"（未回答 "+left+"問）":""}</div><div class="btns"><button class="cbtn re" data-act="restart">もう一度</button><button class="cbtn no" data-act="tomenu">メニューへ</button></div>`;
+  z.fin.classList.add("show"); updateNav(z); checkAllEnded(); updateRail(z);
+}
+function askEnd(z){
+  const left=unansweredIdx(z).length;
+  z.conf.innerHTML=`<div class="msg">終了しますか？</div><div class="sm">${left>0?"未回答 "+left+"問":"全問回答済み"}</div>`+
+    `<div class="btns"><button class="cbtn yes" data-act="endyes">終了する</button><button class="cbtn no" data-act="endno">続ける</button></div>`;
+  z.conf.classList.add("show"); updateRail(z);
+}
+function resetZone(z){
+  z.idx=0;z.score=0;z.correct=0;z.hist=[];z.sel=new Set();z.state="ask";
+  renderQ(z); renderScore();
+}
+function checkAllEnded(){}
+function zoneAct(z,act){
+  if(z.state==="menu") return;
+  if(act==="restart"){ startZone(z); return; }
+  if(act==="tomenu"){ renderMenu(z); return; }
+  if(!z.deck.length) return;
+  if(act==="prev"){
+    if(z.state==="end") renderQ(z);
+    else if(z.idx>0){ markSkip(z); z.idx--; renderQ(z); }
+  }
+  else if(act==="next"){
+    if(z.state==="end") return;
+    if(z.idx<z.deck.length-1){ markSkip(z); z.idx++; renderQ(z); }
+    else{
+      // 最後の問題で進む → 飛ばした問題があれば自動で戻る
+      const others=unansweredIdx(z).filter(i=>i!==z.idx);
+      if(others.length){ markSkip(z); z.idx=others[0]; renderQ(z); } else askEnd(z);
+    }
+  }
+  else if(act==="end"){ if(z.state!=="end") askEnd(z); }
+  else if(act==="endyes") finishZone(z);
+  else if(act==="endno"){ z.conf.classList.remove("show"); updateRail(z); }
+}
+function showFinal(){
+  const played=z=>z.hist.some(h=>h&&h.done);
+  const order=zones.slice().sort((a,b)=>(played(b)-played(a))||b.score-a.score||a.i-b.i);
+  $("#rank").innerHTML=order.map((z,k)=>`<div class="rk" style="--pc:${PLAYERS[z.i].c}"><span class="n">${played(z)?(k+1)+"位":"－"}</span><span>${zoneName(z)}</span><span class="s">${played(z)?`${z.score}点 <small>(${z.correct}/${z.deck.length}${z.review?"・復習":""})</small>`:"未実施"}</span></div>`).join("");
+  show("final");
+}
+
+/* ===================== マルチタッチ入力 =====================
+   pointerdown をボタンごとに処理（タップのみ・ドラッグ無し）。
+   各ポインタ(指)は独立に処理されるため、最大8人同時タップに対応。 */
+const TAP_SEL=".choice,.submit,.nextbtn,.zbtn,.cbtn,.mb,.scbtn,.qimg,.imgv";
+function handleTap(target,pid){
+  const btn=target.closest&&target.closest(TAP_SEL); if(!btn) return;
+  const zel=btn.closest(".zone"); if(!zel) return;
+  const z=zones.find(x=>x.el===zel); if(!z) return;
+  if(btn.classList.contains("scbtn")){
+    const s=scroller(z); if(s) s.scrollBy({top:(+btn.dataset.sc)*Math.max(60,s.clientHeight*0.75),behavior:"smooth"});
+    return;
+  }
+  if(btn.classList.contains("qimg")){
+    const im=btn.querySelector("img");
+    if(im){
+      z.imgv.innerHTML=""; const big=document.createElement("img"); big.alt=""; big.src=im.src;
+      const bk=document.createElement("div"); bk.className="back"; bk.textContent="タップで問題にもどる";
+      z.imgv.appendChild(big); z.imgv.appendChild(bk); z.imgv.classList.add("show"); updateRail(z);
+    }
+    return;
+  }
+  if(btn.classList.contains("imgv")){ z.imgv.classList.remove("show"); updateRail(z); return; }
+  if(btn.classList.contains("mb")){ if(!btn.classList.contains("dis")) menuAct(z,btn.dataset.k,btn.dataset.v); return; }
+  if(btn.dataset.act){ zoneAct(z,btn.dataset.act); return; }
+  if(btn.classList.contains("nextbtn")){ if(z.state==="done") advance(z); return; }
+  if(z.state!=="ask") return;
+  const p=z.deck[z.idx], multi=p.ans.length>1;
+  if(btn.classList.contains("submit")){ if(z.sel.size) judge(z); return; }
+  const L=btn.dataset.l;
+  if(multi){
+    if(z.sel.has(L)){z.sel.delete(L);btn.classList.remove("on");} else {z.sel.add(L);btn.classList.add("on");}
+    z.body.querySelector(".submit").disabled=z.sel.size===0;
+  }else{
+    z.sel=new Set([L]); judge(z);
+  }
+}
+// ===== 各枠の入力ルール =====
+//  ・1つの枠で同時に反応する指は1本だけ（2本目以降は無視：手のひらなどの誤反応を防ぐ）
+//  ・枠が違えば同時に操作できる（8人が同時にタップ・スクロールできる）
+//  ・なぞる(ドラッグ)と、その枠だけがスクロールする。ブラウザ標準のスクロールは使わないので、他の枠に影響しない
+//  ・スクロールできない枠では、触れた瞬間に反応する（従来どおり）。
+//    スクロールできる枠では「なぞらずに離したとき」に反応する（なぞり始めで誤って選ばないため）
+const DEFER_SEL=".choice,.mb,.qimg";
+const MOVE_PX=10, STALE_MS=4000;
+function zoneOf(el){const zel=el.closest&&el.closest(".zone"); return zel?zones.find(x=>x.el===zel):null;}
+function canScroll(z){const s=scroller(z); return !!s&&s.scrollHeight>s.clientHeight+4;}
+function stopInertia(z){ if(z.raf){cancelAnimationFrame(z.raf); z.raf=0;} }
+function inertia(z,v){            // 指を離した後、少しだけ惰性で動く
+  stopInertia(z);
+  let last=performance.now();
+  const step=t=>{
+    const s=scroller(z), dt=Math.min(40,t-last); last=t;
+    if(!s||Math.abs(v)<0.02){ z.raf=0; return; }
+    const before=s.scrollTop; s.scrollTop=before+v*dt; v*=Math.pow(0.95,dt/16);
+    if(s.scrollTop===before){ z.raf=0; return; }
+    z.raf=requestAnimationFrame(step);
+  };
+  z.raf=requestAnimationFrame(step);
+}
+$("#grid").addEventListener("pointerdown",e=>{
+  if(e.pointerType==="mouse"&&e.button!==0) return;
+  e.preventDefault();
+  const z=zoneOf(e.target); if(!z) return;
+  const now=performance.now();
+  if(z.ptr&&now-z.ptr.t>STALE_MS) z.ptr=null;        // 指の離れを取りこぼしても固まらない安全装置
+  if(z.ptr) return;                                   // この枠では別の指が操作中 → 2本目は無視
+  stopInertia(z);
+  const b=e.target.closest&&e.target.closest(TAP_SEL);
+  const deferred=!!(b&&b.matches(DEFER_SEL)&&canScroll(z));
+  z.ptr={id:e.pointerId,x0:e.clientX,y0:e.clientY,y:e.clientY,t:now,ts:e.timeStamp,v:0,moved:false,b,deferred};
+  try{ $("#grid").setPointerCapture(e.pointerId); }catch(_){}
+  if(b&&!deferred){ handleTap(b,e.pointerId); requestAnimationFrame(()=>updateRail(z)); }
+},{passive:false});
+$("#grid").addEventListener("pointermove",e=>{
+  for(const z of zones){
+    const p=z.ptr; if(!p||p.id!==e.pointerId) continue;
+    p.t=performance.now();
+    if(!p.moved&&Math.hypot(e.clientX-p.x0,e.clientY-p.y0)>MOVE_PX) p.moved=true;
+    if(p.moved){
+      const s=scroller(z), dy=e.clientY-p.y;
+      if(s&&s.scrollHeight>s.clientHeight+4){
+        s.scrollTop-=dy;
+        const dt=Math.max(1,e.timeStamp-p.ts); p.v=0.8*p.v+0.2*(-dy/dt);
+      }
+    }
+    p.y=e.clientY; p.ts=e.timeStamp; break;
+  }
+});
+function endPtr(e,cancel){
+  for(const z of zones){
+    const p=z.ptr; if(!p||p.id!==e.pointerId) continue;
+    z.ptr=null;
+    if(!cancel){
+      if(p.deferred&&!p.moved&&p.b&&p.b.isConnected) handleTap(p.b,e.pointerId);
+      else if(p.moved&&Math.abs(p.v)>0.05) inertia(z,p.v);
+    }
+    requestAnimationFrame(()=>updateRail(z));
+    break;
+  }
+}
+$("#grid").addEventListener("pointerup",e=>endPtr(e,false));
+$("#grid").addEventListener("pointercancel",e=>endPtr(e,true));
+$("#grid").addEventListener("lostpointercapture",e=>endPtr(e,true));
+// ゲーム画面は、スクロール/拡大/長押しメニューをすべて禁止（スクロールは▲▼ボタンだけ）
+$("#game").addEventListener("touchmove",e=>e.preventDefault(),{passive:false});
+$("#game").addEventListener("contextmenu",e=>e.preventDefault());
+document.addEventListener("gesturestart",e=>e.preventDefault(),{passive:false});
+
+/* ===================== その他 ===================== */
+/* ---- 生徒の登録・管理 画面 ---- */
+(function(){
+  const keys=["1","2","3","⌫","4","5","6","C","7","8","9","-","0",","];
+  const pad=$("#pad");
+  keys.forEach(k=>{
+    const b=document.createElement("button"); b.textContent=k; if(k==="0"||k===",") b.className="w2";
+    b.onclick=()=>{
+      const inp=$("#stuInput");
+      if(k==="⌫") inp.value=inp.value.slice(0,-1); else if(k==="C") inp.value=""; else inp.value+=k;
+    };
+    pad.appendChild(b);
+  });
+})();
+function doAddStudents(){
+  const inp=$("#stuInput"), msg=$("#stuMsg");
+  if(!inp.value.trim()){msg.className="err";msg.textContent="番号を入力してください";return;}
+  const r=addStudents(inp.value);
+  if(r.bad.length){msg.className="err";msg.textContent=`形式エラー: ${r.bad.join(" ")}（4桁の数字で入力）`+(r.added?` ／ ${r.added}人登録`:"");}
+  else{msg.className="";msg.textContent=`${r.added}人登録`+(r.dup?`（重複 ${r.dup}人は無視）`:"");inp.value="";}
+  renderStudents();
+}
+$("#btnStuAdd").onclick=doAddStudents;
+$("#stuInput").addEventListener("keydown",e=>{if(e.key==="Enter") doAddStudents();});
+$("#stuList").onclick=e=>{
+  const b=e.target.closest("button"); if(!b) return; const sid=b.dataset.sid;
+  if(b.dataset.act==="clr") askConfirm(`${sid} の履歴を消しますか？`,"回答履歴と要復習リストがリセットされます（登録は残ります）","履歴を消す",()=>{clearHist(sid);renderStudents();});
+  else if(b.dataset.act==="del") askConfirm(`${sid} の登録を削除しますか？`,"この生徒の履歴も一緒に消えます","登録を削除",()=>{deleteStudent(sid);renderStudents();});
+};
+$("#btnAllClear").onclick=()=>askConfirm("全員の履歴を消しますか？",`登録 ${STU.length}人の回答履歴をすべてリセットします（登録は残ります）`,"全員の履歴を消す",()=>{HS={};save(HKEY,HS);renderStudents();});
+$("#btnExpXlsx").onclick=()=>doExport("xlsx");
+$("#btnExpCsv").onclick=()=>doExport("csv");
+$("#btnStudents").onclick=()=>{$("#stuMsg").textContent="";$("#expName").value="PTA_history_"+stamp();renderStudents();show("students");};
+$("#btnStuBack").onclick=()=>{refreshMenu();show("menu");};
+$("#btnStart").onclick=()=>startGame();
+$("#btnResult").onclick=showFinal;
+$("#btnBackGame").onclick=()=>{show("game");requestAnimationFrame(()=>zones.forEach(z=>{fitZone(z);updateRail(z);}));};
+$("#btnMenu").onclick=()=>{refreshMenu();show("menu");};
+$("#btnQuit").onclick=()=>{if(confirm("ゲームを終了してメニューに戻りますか？")){refreshMenu();show("menu");}};
+refreshMenu();
+// オフライン対応（https配信のときだけ。ファイルを直接開く場合は何もしない）
+if("serviceWorker" in navigator && /^https?:$/.test(location.protocol)){
+  window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+}
+</script>
+</body>
+</html>
