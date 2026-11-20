@@ -522,7 +522,13 @@ function toCsv(rows){
 
 /* ===================== 状態 ===================== */
 const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
-let bank=SAMPLE.slice();
+let bank=SAMPLE.slice(), bankLabel="内蔵サンプル", manualLoaded=false;
+/* 読み込んだ問題はこの端末に保存し、次回からは読み込み直さなくてよいようにする */
+const BANKKEY="pta_bank_v1";
+function saveBank(name){ try{ localStorage.setItem(BANKKEY,JSON.stringify({name,bank})); }catch(e){} }
+function clearSavedBank(){ try{ localStorage.removeItem(BANKKEY); }catch(e){} }
+(function restoreBank(){ try{ const o=JSON.parse(localStorage.getItem(BANKKEY)||"null");
+  if(o&&Array.isArray(o.bank)&&o.bank.length){ bank=o.bank; bankLabel="保存済み: "+(o.name||"問題ファイル"); } }catch(e){} })();
 let cfg={mode:"pair",players:4};
 let zones=[];
 /* ---- 生徒・履歴（この端末のブラウザに保存） ---- */
@@ -657,22 +663,34 @@ function refreshMenu(){
   $("#rowPlayers").style.display=cfg.mode==="board"?"flex":"none";
   $$("#rowPlayers .chip").forEach(b=>b.classList.toggle("sel",+b.dataset.n===cfg.players));
   $("#stuInfo").textContent=`登録 ${STU.length}人`;
-  setStatus(`問題数: ${bank.length}問`+(bank===SAMPLE?"（内蔵サンプル）":""));
+  setStatus(`問題数: ${bank.length}問（${bankLabel}）`);
 }
 $$(".modebtn").forEach(b=>b.onclick=()=>{cfg.mode=b.dataset.mode;refreshMenu();});
 $$("#rowPlayers .chip").forEach(b=>b.onclick=()=>{cfg.players=+b.dataset.n;refreshMenu();});
 $("#btnLoad").onclick=()=>$("#file").click();
-$("#btnSample").onclick=()=>{bank=SAMPLE.slice();refreshMenu();};
+$("#btnSample").onclick=()=>{bank=SAMPLE.slice();bankLabel="内蔵サンプル";manualLoaded=true;clearSavedBank();refreshMenu();};
 $("#file").onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
   try{
     if(typeof DecompressionStream==="undefined") throw new Error("このブラウザはxlsx読込に未対応です（Edge/Chromeの最新版を使用）");
     const rows=await readXlsxRows(await f.arrayBuffer());
-    bank=rowsToProblems(rows); refreshMenu();
-    setStatus(`${f.name} を読み込みました: ${bank.length}問`);
+    bank=rowsToProblems(rows); manualLoaded=true; bankLabel="保存済み: "+f.name; saveBank(f.name); refreshMenu();
+    setStatus(`${f.name} を読み込みました: ${bank.length}問（この端末に保存しました）`);
   }catch(err){setStatus("読み込み失敗: "+err.message,true);}
   e.target.value="";
 };
+
+/* 公開サイトに problems.xlsx が置かれていれば、自動で読み込む（ネットがなければ前回の分を使う） */
+async function autoLoadServer(){
+  if(!/^https?:$/.test(location.protocol)||typeof DecompressionStream==="undefined") return;
+  try{
+    const r=await fetch("problems.xlsx",{cache:"no-cache"}); if(!r.ok) return;
+    const nb=rowsToProblems(await readXlsxRows(await r.arrayBuffer()));
+    if(!nb.length||manualLoaded) return;
+    bank=nb; bankLabel="配布された問題"; saveBank("配布された問題"); refreshMenu();
+  }catch(e){}
+}
+autoLoadServer();
 
 /* ===================== ゲーム構築 ===================== */
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}

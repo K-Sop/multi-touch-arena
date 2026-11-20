@@ -1,7 +1,7 @@
 /* Multi Touch Arena - オフライン用 Service Worker
    方針: キャッシュ優先で即表示し、裏で最新版を取得（次回起動で更新）。
    アプリを更新したときは VER を変えると古いキャッシュが捨てられます。 */
-const VER = "pta-v11";
+const VER = "pta-v12";
 const CORE = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {
@@ -16,6 +16,21 @@ self.addEventListener("activate", e => {
 self.addEventListener("fetch", e => {
   const req = e.request;
   if (req.method !== "GET" || new URL(req.url).origin !== location.origin) return;
+  // 問題ファイルは「ネット優先」：つながれば常に最新、つながらなければ前回の分を使う
+  if (/\/problems\.xlsx$/i.test(new URL(req.url).pathname)) {
+    e.respondWith((async () => {
+      const cache = await caches.open(VER);
+      try {
+        const res = await fetch(req);
+        if (res && res.ok) cache.put(req, res.clone());
+        return res;
+      } catch (err) {
+        const hit = await cache.match(req, { ignoreSearch: true });
+        return hit || new Response("", { status: 503 });
+      }
+    })());
+    return;
+  }
   e.respondWith((async () => {
     const cache = await caches.open(VER);
     const hit = await cache.match(req, { ignoreSearch: true });
