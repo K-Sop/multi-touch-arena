@@ -1,7 +1,7 @@
 /* Multi Touch Arena - オフライン用 Service Worker
    方針: キャッシュ優先で即表示し、裏で最新版を取得（次回起動で更新）。
    アプリを更新したときは VER を変えると古いキャッシュが捨てられます。 */
-const VER = "pta-v12";
+const VER = "pta-v13";
 const CORE = ["./", "./index.html", "./manifest.json", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 
 self.addEventListener("install", e => {

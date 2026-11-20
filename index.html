@@ -294,10 +294,71 @@ const SAMPLE=[
 
 /* ===================== xlsx 読込（外部ライブラリなし） ===================== */
 /*XLSX_START*/
+/* 展開(deflate)。新しいブラウザは内蔵機能を使い、古いAndroid・電子黒板のブラウザ用に自前の展開処理も備える */
+function inflateJS(src){
+  let pos=0,bb=0,bc=0,o=new Uint8Array(Math.max(1024,src.length*4)),op=0;
+  const bits=n=>{ while(bc<n){ if(pos>=src.length) throw new Error("データが途中で切れています"); bb|=src[pos++]<<bc; bc+=8; } const v=bb&((1<<n)-1); bb>>>=n; bc-=n; return v; };
+  const need=n=>{ if(op+n>o.length){ const t=new Uint8Array(Math.max(o.length*2,op+n)); t.set(o.subarray(0,op)); o=t; } };
+  const build=(lens,n)=>{ const count=new Uint16Array(16),offs=new Uint16Array(16),symbol=new Uint16Array(n);
+    for(let i=0;i<n;i++) count[lens[i]]++; count[0]=0;
+    for(let l=1;l<15;l++) offs[l+1]=offs[l]+count[l];
+    for(let i=0;i<n;i++) if(lens[i]) symbol[offs[lens[i]]++]=i;
+    return {count,symbol}; };
+  const decode=h=>{ let code=0,first=0,index=0;
+    for(let len=1;len<=15;len++){ code|=bits(1); const c=h.count[len];
+      if(code-c<first) return h.symbol[index+(code-first)];
+      index+=c; first+=c; first<<=1; code<<=1; }
+    throw new Error("圧縮データが壊れています"); };
+  const LB=[3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258],
+        LE=[0,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,3,3,3,3,4,4,4,4,5,5,5,5,0],
+        DB=[1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577],
+        DE=[0,0,0,0,1,1,2,2,3,3,4,4,5,5,6,6,7,7,8,8,9,9,10,10,11,11,12,12,13,13],
+        ORD=[16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+  let last;
+  do{
+    last=bits(1); const type=bits(2);
+    if(type===0){
+      bb=0; bc=0; const len=src[pos]|(src[pos+1]<<8); pos+=4; need(len);
+      o.set(src.subarray(pos,pos+len),op); op+=len; pos+=len;
+    }else if(type===1||type===2){
+      let lh,dh;
+      if(type===1){
+        const l=new Uint8Array(288); for(let i=0;i<288;i++) l[i]=i<144?8:i<256?9:i<280?7:8;
+        lh=build(l,288); dh=build(new Uint8Array(30).fill(5),30);
+      }else{
+        const nl=bits(5)+257, nd=bits(5)+1, nc=bits(4)+4, cl=new Uint8Array(19);
+        for(let i=0;i<nc;i++) cl[ORD[i]]=bits(3);
+        const ch=build(cl,19), lens=new Uint8Array(nl+nd);
+        for(let i=0;i<nl+nd;){
+          const sym=decode(ch);
+          if(sym<16) lens[i++]=sym;
+          else{ let prev=0,rep; if(sym===16){ prev=lens[i-1]; rep=3+bits(2); } else if(sym===17) rep=3+bits(3); else rep=11+bits(7);
+            while(rep--) lens[i++]=prev; }
+        }
+        lh=build(lens.subarray(0,nl),nl); dh=build(lens.subarray(nl),nd);
+      }
+      for(;;){
+        const sym=decode(lh);
+        if(sym<256){ need(1); o[op++]=sym; }
+        else if(sym===256) break;
+        else{
+          const s2=sym-257, len=LB[s2]+bits(LE[s2]), d=decode(dh), dist=DB[d]+bits(DE[d]);
+          need(len); for(let i=0;i<len;i++){ o[op]=o[op-dist]; op++; }
+        }
+      }
+    }else throw new Error("圧縮データが壊れています");
+  }while(!last);
+  return o.slice(0,op);
+}
 async function inflateRaw(u8){
-  const ds=new DecompressionStream("deflate-raw");
-  const w=ds.writable.getWriter(); w.write(u8); w.close();
-  return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+  if(typeof DecompressionStream!=="undefined"){
+    try{
+      const ds=new DecompressionStream("deflate-raw");
+      const w=ds.writable.getWriter(); w.write(u8); w.close();
+      return new Uint8Array(await new Response(ds.readable).arrayBuffer());
+    }catch(e){ /* 内蔵機能が使えない場合は下の自前処理へ */ }
+  }
+  return inflateJS(u8);
 }
 async function unzip(buf){
   const u8=new Uint8Array(buf), dv=new DataView(buf);
@@ -672,7 +733,6 @@ $("#btnSample").onclick=()=>{bank=SAMPLE.slice();bankLabel="内蔵サンプル";
 $("#file").onchange=async e=>{
   const f=e.target.files[0]; if(!f) return;
   try{
-    if(typeof DecompressionStream==="undefined") throw new Error("このブラウザはxlsx読込に未対応です（Edge/Chromeの最新版を使用）");
     const rows=await readXlsxRows(await f.arrayBuffer());
     bank=rowsToProblems(rows); manualLoaded=true; bankLabel="保存済み: "+f.name; saveBank(f.name); refreshMenu();
     setStatus(`${f.name} を読み込みました: ${bank.length}問（この端末に保存しました）`);
@@ -682,13 +742,16 @@ $("#file").onchange=async e=>{
 
 /* 公開サイトに problems.xlsx が置かれていれば、自動で読み込む（ネットがなければ前回の分を使う） */
 async function autoLoadServer(){
-  if(!/^https?:$/.test(location.protocol)||typeof DecompressionStream==="undefined") return;
+  if(!/^https?:$/.test(location.protocol)) return;
+  let r;
+  try{ r=await fetch("problems.xlsx",{cache:"no-cache"}); }
+  catch(e){ if(bankLabel==="内蔵サンプル") setStatus("問題数: "+bank.length+"問（内蔵サンプル）※ネットにつながらないため、配布された問題を取得できません"); return; }
+  if(!r.ok) return;                       // サイトに problems.xlsx が無い場合は何もしない
   try{
-    const r=await fetch("problems.xlsx",{cache:"no-cache"}); if(!r.ok) return;
     const nb=rowsToProblems(await readXlsxRows(await r.arrayBuffer()));
     if(!nb.length||manualLoaded) return;
     bank=nb; bankLabel="配布された問題"; saveBank("配布された問題"); refreshMenu();
-  }catch(e){}
+  }catch(e){ setStatus("配布された問題を読み込めませんでした: "+e.message+"（"+bankLabel+"を使用中）",true); }
 }
 autoLoadServer();
 
